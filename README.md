@@ -4,6 +4,8 @@
 
 没有构建、没有依赖、没有后端 —— 双击 `index.html` 就能用。
 
+在线版：**https://adsj-alt.github.io/DeepSeek-Balance-Whale-Widget/**
+
 ![余额充足的时候](screenshots/ok.png)
 
 ## 用起来
@@ -68,7 +70,9 @@ python -m http.server 8787
 
 ## 放到 GitHub Pages
 
-整个文件夹推上去，在仓库 Settings → Pages 里选 main 分支根目录。`index.html` 是全部，没有别的资源要配。
+已经放好了：仓库 `main` 分支根目录，推送即自动重建 —— https://adsj-alt.github.io/DeepSeek-Balance-Whale-Widget/
+
+自己另开一份的话，整个文件夹推上去，Settings → Pages 里选 main 分支根目录。`index.html` 是全部，没有别的资源要配。
 
 ## 文件
 
