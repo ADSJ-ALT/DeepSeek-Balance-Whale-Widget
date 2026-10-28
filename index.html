@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>DeepSeek 余额 · 鲸鱼小部件</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%23071524'/%3E%3Cpath d='M4 13.6c2-.6 3.2-1.8 4-3.4.9-1.8 2.5-2.9 4.5-2.9 3.1 0 5.6 2.5 5.6 5.4 0 2.8-2.3 5-5.1 5-1.4 0-2.7-.6-3.7-1.5' fill='none' stroke='%2348d6ff' stroke-width='1.7' stroke-linecap='round'/%3E%3Ccircle cx='15.4' cy='10' r='1' fill='%2348d6ff'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --text:#e8f4ff;
+    --dim:#88a9c3;
+    --line:rgba(130,200,255,.14);
+    --stage-h: clamp(420px, 62vh, 560px);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    min-height:100vh;
+    background:
+      radial-gradient(120% 110% at 50% -10%, #0b1e30 0%, #060e18 55%, #03070c 100%);
+    color:var(--text);
+    font-family:"Segoe UI Variable Text","Segoe UI",-apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{display:flex;flex-direction:column;align-items:center;gap:14px;padding:22px;width:100%;max-width:1000px}
+
+  .stage{
+    position:relative;
+    width:100%;
+    height:var(--stage-h);
+    border-radius:26px;
+    overflow:hidden;
+    background:#04121f;
+    isolation:isolate;
+    box-shadow:
+      0 40px 90px -34px rgba(0,0,0,.95),
+      0 0 0 1px rgba(120,200,255,.10),
+      0 1px 0 rgba(180,230,255,.10) inset;
+    --accent:#48d6ff;
+  }
+  .stage[data-mood="low"]{--accent:#f3ad4d}
+  .stage[data-mood="error"],
+  .stage[data-mood="unavailable"]{--accent:#ff8080}
+  .stage[data-mood="idle"]{--accent:#7ea7c6}
+
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .vignette{
+    position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(78% 70% at 68% 58%, transparent 38%, rgba(2,8,14,.6) 100%);
+  }
+
+  .hud{
+    position:absolute;inset:0;
+    padding:22px 26px 20px;
+    display:grid;
+    grid-template-rows:auto 1fr auto;
+    pointer-events:none;
+  }
+  .hud > *{pointer-events:auto}
+
+  header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .brand{display:flex;align-items:center;gap:10px;min-width:0}
+  .mark{width:24px;height:24px;flex:none;color:var(--accent);filter:drop-shadow(0 0 10px rgba(72,214,255,.35))}
+  .brand-txt{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+  .brand-txt b{font-size:14px;font-weight:600;letter-spacing:.01em}
+  .brand-txt span{font-size:9px;letter-spacing:.24em;color:var(--dim)}
+
+  .pill{
+    display:flex;align-items:center;gap:7px;
+    font-size:12px;padding:6px 11px;border-radius:999px;
+    background:rgba(255,255,255,.045);
+    border:1px solid rgba(255,255,255,.075);
+    color:#bcd8ea;white-space:nowrap;
+  }
+  .pill i{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 9px var(--accent)}
+  .stage[data-busy="1"] .pill i{animation:pulse 1s ease-in-out infinite}
+  @keyframes pulse{50%{opacity:.25;transform:scale(.7)}}
+
+  .balance{align-self:center;max-width:min(52%, 420px);min-width:0}
+  .amount{display:flex;align-items:baseline;gap:6px}
+  .cur{font-size:clamp(19px,2.4vw,26px);font-weight:500;color:var(--accent);opacity:.9}
+  .num{
+    font-size:clamp(42px,6.2vw,74px);
+    font-weight:600;letter-spacing:-.025em;line-height:1;
+    font-variant-numeric:tabular-nums;
+    text-shadow:0 10px 44px color-mix(in srgb, var(--accent) 22%, transparent);
+    transition:opacity .25s ease;
+  }
+  .num.stale{opacity:.45}
+  .hint{margin:12px 0 0;font-size:12.5px;line-height:1.5;color:var(--dim);max-width:34ch}
+  .hint.warn{color:#f3c078}
+
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .chip{
+    font-size:12px;padding:5px 10px;border-radius:999px;
+    background:rgba(140,210,255,.07);
+    border:1px solid rgba(140,210,255,.13);
+    color:#b6d4e6;
+    font-variant-numeric:tabular-nums;
+  }
+  .chip.ghost{background:transparent;border-style:dashed;color:#8fb3ca}
+
+  footer{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;font-size:12px;color:var(--dim)}
+  .meta{display:flex;align-items:center;gap:8px;min-width:0}
+  .meta span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ctl{display:flex;align-items:center;gap:8px;flex:none}
+  .count{font-variant-numeric:tabular-nums;opacity:.75}
+
+  button{
+    font:inherit;color:#cfe6f5;
+    background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.10);
+    padding:7px 13px;border-radius:10px;cursor:pointer;
+    transition:background .18s ease,border-color .18s ease,transform .12s ease;
+  }
+  button:hover{background:rgba(120,200,255,.13);border-color:rgba(120,200,255,.32)}
+  button:active{transform:translateY(1px)}
+  button:disabled{opacity:.5;cursor:default;transform:none}
+  button:focus-visible,input:focus-visible,select:focus-visible{
+    outline:2px solid color-mix(in srgb, var(--accent) 70%, white);
+    outline-offset:2px;
+  }
+  button.primary{
+    background:linear-gradient(180deg, rgba(72,214,255,.30), rgba(72,214,255,.16));
+    border-color:rgba(72,214,255,.45);color:#eafcff;font-weight:600;
+  }
+  button.primary:hover{background:linear-gradient(180deg, rgba(72,214,255,.42), rgba(72,214,255,.24))}
+
+  /* 设置抽屉 */
+  .sheet{
+    position:absolute;left:0;right:0;bottom:0;z-index:5;
+    padding:20px 24px 22px;
+    background:linear-gradient(180deg, rgba(9,26,41,.90), rgba(5,14,23,.98));
+    backdrop-filter:blur(20px) saturate(120%);
+    -webkit-backdrop-filter:blur(20px) saturate(120%);
+    border-top:1px solid var(--line);
+    box-shadow:0 -24px 60px -30px rgba(0,0,0,.9);
+    transform:translateY(101%);
+    transition:transform .38s cubic-bezier(.2,.8,.2,1);
+    max-height:100%;overflow:auto;
+  }
+  .sheet.open{transform:none}
+  .sheet h2{margin:0 0 4px;font-size:14px;font-weight:600;letter-spacing:.01em}
+  .sheet p.note{margin:0 0 16px;font-size:11.5px;color:var(--dim);line-height:1.55}
+  .row{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .row label{font-size:12.5px;color:#a9c7da;flex:none;width:96px}
+  .row input[type=text],.row input[type=password],.row select{
+    flex:1;min-width:180px;
+    background:rgba(0,0,0,.28);
+    border:1px solid rgba(140,210,255,.16);
+    border-radius:10px;padding:9px 11px;
+    color:var(--text);font:inherit;font-size:13px;
+  }
+  .row input::placeholder{color:#5f7d92}
+  .sheet .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+  .sheet .actions .spacer{margin-right:auto;color:#d98f8f;border-color:rgba(255,120,120,.22)}
+  .sheet .actions .spacer:hover{background:rgba(255,120,120,.12);border-color:rgba(255,120,120,.4)}
+  .check{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#a9c7da}
+  .check input{width:15px;height:15px;accent-color:#48d6ff}
+  .reveal{width:auto!important;flex:none!important;min-width:0!important}
+
+  .foot{margin:0;font-size:11.5px;color:#5c7a90;text-align:center}
+
+  @media (max-width:720px){
+    :root{--stage-h:clamp(470px, 74vh, 640px)}
+    .hud{padding:18px 18px 16px}
+    .balance{max-width:100%;align-self:start;margin-top:26px}
+    .num{font-size:clamp(40px,11vw,58px)}
+    .hint{max-width:100%}
+    .brand-txt span{display:none}
+    .foot{display:none}
+    .sheet{padding:18px 18px 20px}
+    .row label{width:100%}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .sheet{transition:none}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <main class="stage" id="stage" data-mood="idle">
+    <canvas id="sea" aria-hidden="true"></canvas>
+    <div class="vignette"></div>
+
+    <div class="hud">
+      <header>
+        <div class="brand">
+          <svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M3.4 13.9c2.1-.6 3.4-1.9 4.2-3.6.9-1.9 2.6-3 4.7-3 3.3 0 5.9 2.6 5.9 5.7 0 2.9-2.4 5.2-5.4 5.2-1.5 0-2.9-.6-3.9-1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M18.2 10.6c.9-.2 1.9-.8 2.4-1.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <circle cx="15.2" cy="10.1" r="1" fill="currentColor"/>
+          </svg>
+          <div class="brand-txt">
+            <b>DeepSeek 余额</b>
+            <span>BALANCE WHALE</span>
+          </div>
+        </div>
+        <div class="pill" id="statusPill"><i></i><span id="statusText">未连接</span></div>
+      </header>
+
+      <section class="balance">
+        <div class="amount">
+          <span class="cur" id="curSymbol">¥</span>
+          <span class="num" id="amount">--.--</span>
+        </div>
+        <p class="hint" id="hint">填入 API Key，鲸鱼就替你去看一眼余额</p>
+        <div class="chips" id="chips"></div>
+      </section>
+
+      <footer>
+        <div class="meta"><span id="metaText">数据来自 api.deepseek.com</span></div>
+        <div class="ctl">
+          <span class="count" id="countDown"></span>
+          <button type="button" id="btnRefresh" title="刷新（快捷键 R）">刷新</button>
+          <button type="button" id="btnSettings" title="设置">设置</button>
+        </div>
+      </footer>
+    </div>
+
+    <form class="sheet" id="sheet" novalidate>
+      <h2>连接你的 DeepSeek 账户</h2>
+      <p class="note">Key 只保存在这台机器上，唯一的外发请求是 <code>GET https://api.deepseek.com/user/balance</code>。</p>
+      <div class="row">
+        <label for="keyInput">API Key</label>
+        <input id="keyInput" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false">
+        <button type="button" class="reveal" id="btnReveal">显示</button>
+      </div>
+      <div class="row">
+        <label for="intervalSel">自动刷新</label>
+        <select id="intervalSel">
+          <option value="0">关闭</option>
+          <option value="60">每 1 分钟</option>
+          <option value="300" selected>每 5 分钟</option>
+          <option value="900">每 15 分钟</option>
+          <option value="3600">每 1 小时</option>
+        </select>
+      </div>
+      <div class="row">
+        <label></label>
+        <span class="check"><input type="checkbox" id="remember" checked><label for="remember" style="width:auto">记住 Key（本机 localStorage）</label></span>
+      </div>
+      <div class="actions">
+        <button type="button" class="spacer" id="btnClear">清除本机数据</button>
+        <button type="button" id="btnCancel">取消</button>
+        <button type="submit" class="primary" id="btnSave">保存并刷新</button>
+      </div>
+    </form>
+  </main>
+  <p class="foot">鲸鱼只是一个动画，别喂它 Key。</p>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const API = "https://api.deepseek.com/user/balance";
+  const KEY = "dsw.key", REMEMBER = "dsw.remember", INTERVAL = "dsw.interval", CACHE = "dsw.cache";
+  const DEMO = {
+    is_available: true,
+    balance_infos: [{ currency: "CNY", total_balance: "72.40", granted_balance: "22.40", topped_up_balance: "50.00" }]
+  };
+  const SYMBOL = { CNY: "¥", USD: "$", EUR: "€", GBP: "£", JPY: "¥" };
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const stage = $("#stage");
+  const canvas = $("#sea");
+  const amountEl = $("#amount");
+  const curEl = $("#curSymbol");
+  const hintEl = $("#hint");
+  const chipsEl = $("#chips");
+  const metaEl = $("#metaText");
+  const statusText = $("#statusText");
+  const countEl = $("#countDown");
+  const sheet = $("#sheet");
+  const keyInput = $("#keyInput");
+  const intervalSel = $("#intervalSel");
+  const rememberBox = $("#remember");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const state = {
+    key: "",
+    remember: true,
+    interval: 300,
+    demo: false,
+    data: null,
+    error: null,
+    busy: false,
+    lastOk: 0,
+    nextAt: 0,
+    mood: "idle",
+    notice: ""
+  };
+
+  /* ---------- 存储 ---------- */
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+    del(k) { try { localStorage.removeItem(k); } catch {} }
+  };
+
+  function readCache() {
+    try {
+      const raw = store.get(CACHE);
+      if (!raw) return null;
+      const o = JSON.parse(raw);
+      if (!o || !o.at || !o.data) return null;
+      return o;
+    } catch { return null; }
+  }
+  function writeCache() {
+    if (!state.data) return;
+    try { store.set(CACHE, JSON.stringify({ at: Date.now(), data: state.data })); } catch {}
+  }
+
+  /* ---------- 工具 ---------- */
+  const money = (v) => {
+    const n = Number(v);
+    if (!isFinite(n)) return "—";
+    if (n !== 0 && Math.abs(n) < 0.01) return n.toFixed(4);
+    return n.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+  const clock = (ts) => {
+    const d = new Date(ts);
+    return d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  };
+  const mmss = (sec) => {
+    const s = Math.max(0, Math.round(sec));
+    return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  };
+  function primaryInfo(data) {
+    const list = (data && Array.isArray(data.balance_infos)) ? data.balance_infos : [];
+    return list.find((x) => Number(x.total_balance) > 0) || list[0] || null;
+  }
+
+  /* ---------- 渲染 ---------- */
+  function setMood(m) {
+    state.mood = m;
+    stage.dataset.mood = m;
+  }
+
+  function render() {
+    const info = primaryInfo(state.data);
+    const demoTag = state.demo ? '<span class="chip ghost">演示</span>' : "";
+
+    // 数字
+    if (info) {
+      curEl.textContent = SYMBOL[info.currency] || (info.currency ? info.currency + " " : "¥");
+      amountEl.textContent = money(info.total_balance);
+      amountEl.classList.toggle("stale", !!state.error);
+    } else {
+      curEl.textContent = "¥";
+      amountEl.textContent = "--.--";
+      amountEl.classList.remove("stale");
+    }
+
+    // 明细 chips
+    const parts = [];
+    if (info) {
+      parts.push(`<span class="chip">充值 ${SYMBOL[info.currency] || ""}${money(info.topped_up_balance)}</span>`);
+      parts.push(`<span class="chip">赠送 ${SYMBOL[info.currency] || ""}${money(info.granted_balance)}</span>`);
+      const others = (state.data.balance_infos || []).filter((x) => x !== info);
+      for (const o of others) {
+        parts.push(`<span class="chip ghost">${o.currency} ${money(o.total_balance)}</span>`);
+      }
+    }
+    parts.push(demoTag);
+    chipsEl.innerHTML = parts.filter(Boolean).join("");
+
+    // 状态
+    let mood = "idle", label = "未连接", hint = "", warn = false;
+
+    if (state.error) {
+      mood = "error";
+      label = "出错了";
+      hint = state.error;
+      warn = true;
+    } else if (!state.data) {
+      mood = "idle";
+      label = "未连接";
+      hint = "填入 API Key，鲸鱼就替你去看一眼余额";
+    } else if (state.data.is_available === false) {
+      mood = "unavailable";
+      label = "不可用";
+      hint = "账户余额不足，接口已经暂停调用。";
+      warn = true;
+    } else if (Number(info && info.total_balance) <= 5) {
+      mood = "low";
+      label = "余额偏低";
+      hint = `上次更新 ${clock(state.lastOk)}，该充值了。`;
+    } else {
+      mood = "ok";
+      label = state.busy ? "更新中" : "可用";
+      hint = `上次更新 ${clock(state.lastOk)}`;
+    }
+
+    if (state.demo) { label = "演示数据"; hint = "这是假的余额，真的在 API 里。"; }
+
+    setMood(mood);
+    statusText.textContent = label;
+    hintEl.textContent = hint;
+    hintEl.classList.toggle("warn", warn);
+    stage.dataset.busy = state.busy ? "1" : "0";
+
+    // 底部
+    if (state.demo) {
+      metaEl.textContent = "demo 模式 · 不联网";
+    } else if (state.error) {
+      metaEl.textContent = "上次成功 " + (state.lastOk ? clock(state.lastOk) : "—");
+    } else if (state.lastOk) {
+      metaEl.textContent = "数据来自 api.deepseek.com · " + clock(state.lastOk);
+    } else {
+      metaEl.textContent = "数据来自 api.deepseek.com";
+    }
+    metaEl.title = metaEl.textContent;
+
+    if (state.interval > 0 && state.nextAt) {
+      countEl.textContent = mmss((state.nextAt - Date.now()) / 1000);
+      countEl.title = "距离下次自动刷新";
+    } else {
+      countEl.textContent = "";
+      countEl.title = "";
+    }
+    $("#btnRefresh").disabled = state.busy;
+  }
+
+  /* ---------- 请求 ---------- */
+  let inflight = 0;
+  async function fetchBalance() {
+    if (state.demo) {
+      state.data = JSON.parse(JSON.stringify(DEMO));
+      state.data.balance_infos[0].total_balance = (60 + Math.random() * 25).toFixed(2);
+      state.data.balance_infos[0].topped_up_balance = "50.00";
+      state.data.balance_infos[0].granted_balance = (state.data.balance_infos[0].total_balance - 50).toFixed(2);
+      state.lastOk = Date.now();
+      state.error = null;
+      state.nextAt = 0;
+      sea.burst(0.6);
+      render();
+      return;
+    }
+    if (!state.key) { openSheet(); return; }
+
+    const ticket = ++inflight;
+    state.busy = true;
+    state.error = null;
+    render();
+
+    try {
+      const res = await fetch(API, {
+        method: "GET",
+        headers: { Authorization: "Bearer " + state.key, Accept: "application/json" },
+        cache: "no-store"
+      });
+      if (ticket !== inflight) return;
+
+      if (res.status === 401 || res.status === 403) {
+        throw new Error("Key 不对，或者它没有余额查询权限。");
+      }
+      if (!res.ok) throw new Error(`接口回了 HTTP ${res.status}，过一会儿再试。`);
+
+      const json = await res.json();
+      if (!json || !Array.isArray(json.balance_infos)) throw new Error("返回的数据看不懂，先别信。");
+
+      state.data = json;
+      state.lastOk = Date.now();
+      state.nextAt = state.interval > 0 ? Date.now() + state.interval * 1000 : 0;
+      writeCache();
+      sea.burst(1);
+    } catch (e) {
+      if (ticket !== inflight) return;
+      const msg = String(e && e.message || e);
+      if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
+        state.error = "连不上 api.deepseek.com —— 检查网络或代理。";
+      } else if (/^HTTP 401|Key 不对/.test(msg)) {
+        state.error = msg;
+      } else {
+        state.error = msg;
+      }
+      state.nextAt = state.interval > 0 ? Date.now() + state.interval * 1000 : 0;
+    } finally {
+      if (ticket === inflight) {
+        state.busy = false;
+        render();
+      }
+    }
+  }
+
+  /* ---------- 设置抽屉 ---------- */
+  function openSheet() {
+    keyInput.value = state.key;
+    intervalSel.value = String(state.interval);
+    rememberBox.checked = state.remember;
+    sheet.classList.add("open");
+    setTimeout(() => keyInput.focus({ preventScroll: true }), 120);
+  }
+  function closeSheet() { sheet.classList.remove("open"); }
+
+  /* ---------- 画布：一头慢吞吞的鲸 ---------- */
+  const sea = (() => {
+    const ctx = canvas.getContext("2d");
+    let W = 0, H = 0, dpr = 1, raf = 0, last = 0;
+    const bubbles = [];
+    const spouts = [];
+    let t = 0;
+
+    const MOOD = {
+      idle:        { top: "rgb(56,92,126)",  bottom: "rgb(24,46,70)",  belly: "rgba(198,224,244,.18)", glow: "110,190,235" },
+      ok:          { top: "rgb(62,118,164)", bottom: "rgb(22,56,88)",  belly: "rgba(210,236,255,.26)", glow: "72,214,255"  },
+      low:         { top: "rgb(74,112,142)", bottom: "rgb(28,52,74)",  belly: "rgba(226,232,240,.24)", glow: "243,173,77"  },
+      unavailable: { top: "rgb(66,84,102)",  bottom: "rgb(26,40,56)",  belly: "rgba(206,220,234,.18)", glow: "255,128,128" },
+      error:       { top: "rgb(66,84,102)",  bottom: "rgb(26,40,56)",  belly: "rgba(206,220,234,.18)", glow: "255,128,128" }
+    };
+
+    function resize() {
+      const r = canvas.getBoundingClientRect();
+      dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+      W = r.width; H = r.height;
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      seedBubbles();
+      buildShafts();
+    }
+
+    function seedBubbles() {
+      bubbles.length = 0;
+      const n = W < 700 ? 16 : 26;
+      for (let i = 0; i < n; i++) bubbles.push(newBubble(true));
+    }
+    function newBubble(anywhere) {
+      return {
+        x: Math.random() * W,
+        y: anywhere ? Math.random() * H : H + 10,
+        r: 0.8 + Math.random() * 3.2,
+        vy: 6 + Math.random() * 16,
+        amp: 3 + Math.random() * 12,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.4 + Math.random() * 1.1,
+        a: 0.06 + Math.random() * 0.16
+      };
+    }
+
+    // 鲸鱼局部坐标：身长 1，头朝右
+    function bodyPath() {
+      ctx.beginPath();
+      ctx.moveTo(0.495, -0.045);
+      ctx.bezierCurveTo(0.505, -0.105, 0.452, -0.160, 0.360, -0.177);
+      ctx.bezierCurveTo(0.246, -0.194, 0.096, -0.192, -0.048, -0.172);
+      ctx.bezierCurveTo(-0.186, -0.154, -0.310, -0.108, -0.385, -0.055);
+      ctx.bezierCurveTo(-0.402, -0.043, -0.410, -0.020, -0.406, 0.000);
+      ctx.bezierCurveTo(-0.330, 0.040, -0.220, 0.078, -0.095, 0.100);
+      ctx.bezierCurveTo(0.050, 0.124, 0.205, 0.126, 0.315, 0.106);
+      ctx.bezierCurveTo(0.402, 0.090, 0.478, 0.052, 0.495, -0.045);
+      ctx.closePath();
+    }
+
+    // 尾鳍：局部坐标以尾柄末端为原点。侧看是一片薄刃，稍稍上扬。
+    function tailPath() {
+      ctx.beginPath();
+      ctx.moveTo(0.020, -0.020);
+      ctx.quadraticCurveTo(-0.120, -0.062, -0.285, -0.052);
+      ctx.quadraticCurveTo(-0.302, -0.030, -0.268, -0.010);
+      ctx.quadraticCurveTo(-0.230, 0.010, -0.150, 0.024);
+      ctx.quadraticCurveTo(-0.060, 0.030, 0.020, 0.018);
+      ctx.closePath();
+    }
+
+    function drawWhale(cx, cy, L, mood, time) {
+      const m = MOOD[mood] || MOOD.ok;
+      const bob = Math.sin(time * 0.55) * (reduced ? 2 : 7);
+      const tilt = Math.sin(time * 0.42) * 0.022;
+      const drift = Math.sin(time * 0.21) * (reduced ? 4 : 16);
+
+      ctx.save();
+      ctx.translate(cx + drift, cy + bob);
+      ctx.rotate(tilt);
+      ctx.scale(L, L);
+
+      // 尾鳍：根部藏进身体里，只露出后面那一片
+      const wag = Math.sin(time * 1.05) * 0.15;
+      ctx.save();
+      ctx.translate(-0.372, -0.004);
+      ctx.rotate(0.05 + wag);
+
+      // 远侧那一片，稍微暗一点
+      ctx.save();
+      ctx.translate(0.006, 0.030);
+      ctx.scale(0.95, 0.80);
+      ctx.fillStyle = "rgba(9,30,50,.65)";
+      tailPath();
+      ctx.fill();
+      ctx.restore();
+
+      const tg = ctx.createLinearGradient(0, -0.08, -0.28, 0.03);
+      tg.addColorStop(0, m.top);
+      tg.addColorStop(1, m.bottom);
+      ctx.fillStyle = tg;
+      ctx.save();
+      ctx.shadowColor = `rgba(${m.glow},.20)`;
+      ctx.shadowBlur = 24;
+      tailPath();
+      ctx.fill();
+      ctx.restore();
+      ctx.restore();
+
+      // 背鳍：先画，根部会被身体盖住
+      ctx.beginPath();
+      ctx.moveTo(-0.230, -0.132);
+      ctx.quadraticCurveTo(-0.205, -0.202, -0.132, -0.154);
+      ctx.quadraticCurveTo(-0.180, -0.150, -0.230, -0.132);
+      ctx.closePath();
+      ctx.fillStyle = m.bottom;
+      ctx.fill();
+
+      // 身体
+      const g = ctx.createLinearGradient(0, -0.19, 0, 0.13);
+      g.addColorStop(0, m.top);
+      g.addColorStop(0.55, m.top);
+      g.addColorStop(1, m.bottom);
+      ctx.fillStyle = g;
+      ctx.save();
+      ctx.shadowColor = `rgba(${m.glow},.20)`;
+      ctx.shadowBlur = 38;
+      bodyPath();
+      ctx.fill();
+      ctx.restore();
+
+      // 形体：一道从左上来的光 + 肚皮 + 喉褶
+      ctx.save();
+      bodyPath();
+      ctx.clip();
+
+      const hg = ctx.createLinearGradient(0.5, -0.18, -0.1, 0.12);
+      hg.addColorStop(0, "rgba(190,232,255,.16)");
+      hg.addColorStop(0.55, "rgba(190,232,255,0)");
+      ctx.fillStyle = hg;
+      ctx.fillRect(-0.45, -0.2, 1.0, 0.34);
+
+      const bg2 = ctx.createLinearGradient(0, 0.010, 0, 0.135);
+      bg2.addColorStop(0, "rgba(0,0,0,0)");
+      bg2.addColorStop(1, m.belly);
+      ctx.fillStyle = bg2;
+      ctx.fillRect(-0.45, 0.0, 1.0, 0.15);
+
+      ctx.strokeStyle = "rgba(6,24,40,.14)";
+      ctx.lineWidth = 0.0042;
+      for (let i = 0; i < 3; i++) {
+        const y0 = 0.040 + i * 0.022;
+        ctx.beginPath();
+        ctx.moveTo(0.430 - i * 0.016, y0);
+        ctx.quadraticCurveTo(0.290, y0 + 0.032, 0.150, y0 + 0.024);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // 背脊高光
+      ctx.beginPath();
+      ctx.moveTo(0.442, -0.078);
+      ctx.bezierCurveTo(0.402, -0.152, 0.296, -0.184, 0.158, -0.188);
+      ctx.bezierCurveTo(0.018, -0.192, -0.124, -0.172, -0.252, -0.138);
+      ctx.strokeStyle = "rgba(196,234,255,.22)";
+      ctx.lineWidth = 0.0070;
+      ctx.lineCap = "round";
+      ctx.stroke();
+
+      // 胸鳍：一片向后下方扫过去的鳍，根部埋在身上
+      ctx.save();
+      ctx.translate(0.205, 0.020);
+      ctx.rotate(Math.sin(time * 0.8) * 0.05);
+      ctx.beginPath();
+      ctx.moveTo(0.000, 0.000);
+      ctx.bezierCurveTo(-0.020, 0.065, -0.065, 0.130, -0.127, 0.162);
+      ctx.quadraticCurveTo(-0.095, 0.100, -0.037, 0.025);
+      ctx.quadraticCurveTo(-0.015, 0.008, 0.000, 0.000);
+      ctx.closePath();
+      const fg = ctx.createLinearGradient(0.0, 0.0, -0.12, 0.15);
+      fg.addColorStop(0, m.top);
+      fg.addColorStop(1, "rgba(10,32,52,.92)");
+      ctx.fillStyle = fg;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(0.000, 0.000);
+      ctx.bezierCurveTo(-0.020, 0.065, -0.065, 0.130, -0.127, 0.162);
+      ctx.strokeStyle = "rgba(180,220,248,.18)";
+      ctx.lineWidth = 0.004;
+      ctx.stroke();
+      ctx.restore();
+
+      // 眼
+      ctx.beginPath();
+      ctx.arc(0.345, -0.048, 0.0130, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(5,14,24,.95)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0.349, -0.053, 0.0044, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(224,246,255,.95)";
+      ctx.fill();
+
+      // 嘴线：从吻端一路拉到眼下方
+      ctx.beginPath();
+      ctx.moveTo(0.492, 0.006);
+      ctx.quadraticCurveTo(0.428, 0.056, 0.318, 0.068);
+      ctx.strokeStyle = "rgba(6,22,36,.42)";
+      ctx.lineWidth = 0.0070;
+      ctx.lineCap = "round";
+      ctx.stroke();
+
+      // 气孔
+      ctx.beginPath();
+      ctx.ellipse(0.125, -0.168, 0.011, 0.0048, 0.14, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(8,26,42,.45)";
+      ctx.fill();
+
+      ctx.restore();
+      return { x: cx + drift + 0.125 * L, y: cy + bob - 0.168 * L, L };
+    }
+
+    function spawnSpout(x, y, power) {
+      const n = Math.round(14 * power);
+      for (let i = 0; i < n; i++) {
+        spouts.push({
+          x: x + (Math.random() - 0.5) * 8,
+          y,
+          vx: (Math.random() - 0.5) * 90,
+          vy: -60 - Math.random() * 90 * power,
+          life: 1,
+          decay: 0.9 + Math.random() * 0.7,
+          r: 1.2 + Math.random() * 2.4
+        });
+      }
+    }
+
+    let burstQueue = 0;
+    function burst(power) { burstQueue = Math.max(burstQueue, power || 1); }
+    let lastHead = null;
+
+    let shafts = null;
+    function buildShafts() {
+      if (!W || !H) return;
+      const c = document.createElement("canvas");
+      c.width = canvas.width; c.height = canvas.height;
+      const g2 = c.getContext("2d");
+      if (!g2) return;
+      g2.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g2.filter = "blur(26px)";
+      for (let i = 0; i < 4; i++) {
+        const x = W * (0.14 + i * 0.24);
+        const w = W * (0.15 + (i % 2) * 0.05);
+        const lg = g2.createLinearGradient(0, 0, 0, H);
+        lg.addColorStop(0, "rgba(128,206,255,.17)");
+        lg.addColorStop(0.55, "rgba(128,206,255,.05)");
+        lg.addColorStop(1, "rgba(128,206,255,0)");
+        g2.fillStyle = lg;
+        g2.beginPath();
+        g2.moveTo(x - w / 2, -40);
+        g2.lineTo(x + w / 2, -40);
+        g2.lineTo(x + w / 2 - 150, H + 40);
+        g2.lineTo(x - w / 2 - 150, H + 40);
+        g2.closePath();
+        g2.fill();
+      }
+      shafts = c;
+    }
+
+    function bg() {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, "#0b2035");
+      g.addColorStop(0.55, "#07182a");
+      g.addColorStop(1, "#040f1b");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+
+      // 光柱（预渲染 + 模糊，慢慢晃）
+      if (shafts) {
+        ctx.save();
+        ctx.globalAlpha = 0.9;
+        ctx.drawImage(shafts, Math.sin(t * 0.07) * 12, 0, W, H);
+        ctx.restore();
+      }
+
+      // 远处的光斑
+      const rg = ctx.createRadialGradient(W * 0.7, H * 0.45, 10, W * 0.7, H * 0.45, Math.max(W, H) * 0.65);
+      rg.addColorStop(0, "rgba(80,190,255,.07)");
+      rg.addColorStop(1, "rgba(80,190,255,0)");
+      ctx.fillStyle = rg;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    function step(dt) {
+      t += dt;
+      const info = primaryInfo(state.data);
+      const mood = state.mood;
+      const m = MOOD[mood] || MOOD.ok;
+
+      bg();
+
+      // 气泡
+      for (const b of bubbles) {
+        b.y -= b.vy * dt;
+        b.x += Math.sin(t * b.speed + b.phase) * 6 * dt;
+        if (b.y < -12) Object.assign(b, newBubble(false));
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(170,220,255,${b.a})`;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.28, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(235,248,255,${b.a * 1.6})`;
+        ctx.fill();
+      }
+
+      // 鲸
+      const narrow = W < 720;
+      const L = narrow ? Math.min(W * 0.62, 420) : Math.min(W * 0.44, 430);
+      const cx = narrow ? W * 0.52 : W * 0.655;
+      const cy = narrow ? H * 0.735 : H * 0.60;
+      const head = drawWhale(cx, cy, L, mood, t);
+      lastHead = head;
+
+      if (burstQueue > 0) {
+        spawnSpout(head.x, head.y, burstQueue);
+        burstQueue = 0;
+      }
+
+      // 水柱
+      for (let i = spouts.length - 1; i >= 0; i--) {
+        const p = spouts[i];
+        p.life -= p.decay * dt;
+        if (p.life <= 0) { spouts.splice(i, 1); continue; }
+        p.vy += 120 * dt;
+        p.vx *= (1 - 1.4 * dt);
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * p.life + 0.4, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(200,238,255,${0.30 * p.life})`;
+        ctx.fill();
+      }
+
+      // 低余额时鲸鱼头顶的小警示，纯装饰
+      if (mood === "low" && info) {
+        ctx.beginPath();
+        ctx.arc(cx + L * 0.34, cy - L * 0.30 + Math.sin(t * 2) * 2, 2.4, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${m.glow},.55)`;
+        ctx.fill();
+      }
+    }
+
+    function loop(ts) {
+      raf = requestAnimationFrame(loop);
+      if (document.hidden) { last = ts; return; }
+      const dt = Math.min((ts - last) / 1000 || 0, 0.05);
+      last = ts;
+      step(dt);
+    }
+
+    function start() {
+      resize();
+      window.addEventListener("resize", resize);
+      if (!reduced) raf = requestAnimationFrame((ts) => { last = ts; loop(ts); });
+      else step(0);
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) last = performance.now();
+      });
+    }
+
+    return { start, burst, get head() { return lastHead; } };
+  })();
+
+  /* ---------- 事件 ---------- */
+  $("#btnRefresh").addEventListener("click", () => fetchBalance());
+  $("#btnSettings").addEventListener("click", openSheet);
+  $("#btnCancel").addEventListener("click", closeSheet);
+  $("#btnReveal").addEventListener("click", () => {
+    const p = keyInput.type === "password";
+    keyInput.type = p ? "text" : "password";
+    $("#btnReveal").textContent = p ? "隐藏" : "显示";
+  });
+  $("#btnClear").addEventListener("click", () => {
+    store.del(KEY); store.del(CACHE); store.del(INTERVAL); store.del(REMEMBER);
+    state.key = ""; state.data = null; state.lastOk = 0; state.error = null; state.nextAt = 0;
+    keyInput.value = "";
+    closeSheet();
+    render();
+  });
+  sheet.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const k = keyInput.value.trim();
+    if (!k) { keyInput.focus(); return; }
+    state.key = k;
+    state.remember = rememberBox.checked;
+    state.interval = Number(intervalSel.value) || 0;
+    state.demo = false;
+    state.error = null;
+    if (state.remember) { store.set(KEY, k); store.set(REMEMBER, "1"); }
+    else { store.del(KEY); store.set(REMEMBER, "0"); }
+    store.set(INTERVAL, String(state.interval));
+    closeSheet();
+    fetchBalance();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && sheet.classList.contains("open")) { closeSheet(); return; }
+    const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName);
+    if (!typing && (e.key === "r" || e.key === "R")) { e.preventDefault(); fetchBalance(); }
+  });
+
+  // 点鲸鱼喷水；点别处收起设置
+  canvas.addEventListener("pointerdown", () => sea.burst(0.75));
+  stage.addEventListener("click", (e) => {
+    if (!sheet.classList.contains("open")) return;
+    if (sheet.contains(e.target)) return;
+    if (e.target.closest("button")) return;
+    closeSheet();
+  });
+
+  // 自动刷新
+  setInterval(() => {
+    if (state.interval <= 0 || state.demo) return;
+    if (state.nextAt && Date.now() >= state.nextAt && !state.busy && state.key) fetchBalance();
+    if (state.nextAt) {
+      countEl.textContent = mmss((state.nextAt - Date.now()) / 1000);
+    }
+  }, 1000);
+
+  /* ---------- 启动 ---------- */
+  function init() {
+    const params = new URLSearchParams(location.search);
+    state.demo = params.get("demo") === "1";
+
+    state.remember = store.get(REMEMBER) !== "0";
+    state.interval = Number(store.get(INTERVAL) ?? 300);
+    if (![0, 60, 300, 900, 3600].includes(state.interval)) state.interval = 300;
+
+    const cached = readCache();
+    if (cached) { state.data = cached.data; state.lastOk = cached.at; }
+
+    const k = store.get(KEY);
+    if (k) state.key = k;
+
+    intervalSel.value = String(state.interval);
+    sea.start();
+
+    if (state.demo) {
+      fetchBalance();
+      return;
+    }
+
+    if (state.key) {
+      fetchBalance();
+    } else {
+      render();
+      if (!cached) setTimeout(openSheet, 700);
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
